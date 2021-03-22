@@ -49,7 +49,11 @@ module WashOutHelper
           end
         end
       else
-        if param.multiplied
+        if param.type == 'io'
+          xml.tag! tag_name, param_options do
+            include_io xml, param.value
+          end
+        elsif param.multiplied
           param.value = [] unless param.value.is_a?(Array)
           param.value.each do |v|
             xml.tag! tag_name, v, param_options
@@ -58,6 +62,25 @@ module WashOutHelper
           xml.tag! tag_name, param.value, param_options
         end
       end
+    end
+  end
+
+  def io_name(io_value)
+    "#{io_value.object_id}@response"
+  end
+
+  def include_io(xml, io_value)
+    xml.tag!  'xop:Include',
+              href: "cid:#{io_name(io_value)}",
+              "xmlns:xop": 'http://www.w3.org/2004/08/xop/include'
+  end
+
+  def fetch_all_io(params, &block)
+    if params.is_a?(Array)
+      params.each { |p| fetch_all_io(p, &block) }
+    else
+      params.struct? && fetch_all_io(params.map, &block)
+      block.call(io_name(params.value), params.value) if params.type == 'io'
     end
   end
 
@@ -109,4 +132,5 @@ module WashOutHelper
     end
     extend_with.merge(data)
   end
+
 end

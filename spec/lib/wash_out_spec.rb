@@ -697,6 +697,66 @@ describe WashOut do
       end
     end
 
+    context "MTOM response" do
+
+      it "handles MTOM responses" do
+        string_io = StringIO.new("This is a stream")
+
+        mock_controller do
+          soap_action "get_file", :args => nil, :return => { a: { file: :io } }
+          define_method(:get_file) do
+            content = "this is a stream"
+            render :soap => { a: { file: string_io } }
+          end
+        end
+
+        request = <<-XML
+        <?xml version="1.0" encoding="UTF-8"?>
+        <env:Envelope xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="false" xmlns:env="http://schemas.xmlsoap.org/soap/envelope/">
+        <env:Body>
+          <tns:get_file></tns:get_file>
+        </env:Body>
+        </env:Envelope>
+        XML
+
+        response = HTTPI.post("http://app/route/api/action", request)
+
+        boundary = response.headers["Content-Type"].scan(/boundary=\"(.+)\"/).first.first
+        stream_id = string_io.object_id
+
+        expected = <<-MULTIPART
+--#{boundary}
+Content-Type: text/xml
+
+<?xml version="1.0" encoding="UTF-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tns="false">
+  <soap:Body>
+    <tns:get_fileResponse>
+      <A xsi:type="tns:A">
+        <File xsi:type="xsd:io">
+          <xop:Include href="cid:#{stream_id}@response" xmlns:xop="http://www.w3.org/2004/08/xop/include"/>
+        </File>
+      </A>
+    </tns:get_fileResponse>
+  </soap:Body>
+</soap:Envelope>
+
+--#{boundary}
+Content-Type: application/octet-stream
+Content-ID: <#{stream_id}@response>
+Content-Transfer-Encoding: binary
+
+This is a stream
+--#{boundary}--
+MULTIPART
+
+        expect(response.body).to eq(expected)
+      end
+
+
+
+    end
+
     it "renders a complex header if specified" do
       mock_controller do
         soap_action "answer", :args => nil, :return => :int, header_return: {:"Auth" => :string}
@@ -733,7 +793,6 @@ describe WashOut do
 </soap:Envelope>
         XML
     end
-
 
     context "types" do
       it "recognize boolean" do

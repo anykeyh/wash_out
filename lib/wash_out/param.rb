@@ -159,6 +159,10 @@ module WashOut
       end
     end
 
+    def has_io?
+      @type.to_sym == :io || (struct? && @map.any?(&:has_io?))
+    end
+
     def flat_copy
       copy = self.class.new(@soap_config, @name, @type.to_sym, @multiplied)
       copy.raw_name = raw_name

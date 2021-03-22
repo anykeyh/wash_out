@@ -138,14 +138,32 @@ module WashOut
         header = HashWithIndifferentAccess.new(header)
       end
 
-      render :template => "wash_out/#{soap_config.wsdl_style}/response",
-             :layout => false,
-             :locals => {
-               :header => header.present? ? inject.call(header, @action_spec[:header_out])
-                                      : nil,
-               :result => inject.call(result, @action_spec[:out])
-             },
-             :content_type => 'text/xml'
+      result = inject.call(result, @action_spec[:out])
+      header = header.present? ? inject.call(header, @action_spec[:header_out]) : nil
+
+      if result.any?(&:has_io?)
+        boundary = SecureRandom.base58(22) # 58**22 > 2**128, so at least 128 bits of entropy here.
+
+        content_type = %(Multipart/Related; start-info="text/xml"; type="application/xop+xml"; boundary="#{boundary}")
+
+        render  template: "wash_out/response_mtom",
+                layout: false,
+                locals: {
+                  header: header,
+                  result: result,
+                  soap_config: soap_config,
+                  boundary: boundary
+                },
+                content_type: content_type
+      else
+        render  template: "wash_out/#{soap_config.wsdl_style}/response",
+                layout: false,
+                locals: {
+                  header: header,
+                  result: result
+                },
+                content_type: 'text/xml'
+      end
     end
 
     # This action is a fallback for all undefined SOAP actions.
